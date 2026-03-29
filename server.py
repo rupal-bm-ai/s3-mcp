@@ -1,6 +1,9 @@
 """
-S3 MCP Server — using FastMCP (handles SSE routing automatically)
+S3 MCP Server — using FastMCP with streamable-http transport
 Hosted on Railway, callable by Cursor Automations as a remote MCP server.
+
+streamable-http is used instead of SSE because Cursor POSTs to the endpoint,
+which SSE (/sse) does not allow. streamable-http (/mcp) accepts both GET and POST.
 """
 
 import gzip
@@ -16,9 +19,11 @@ logger = logging.getLogger("s3-mcp-server")
 
 AWS_REGION = os.environ.get("AWS_REGION", "us-west-2")
 
-# FastMCP handles all SSE transport and routing automatically
-mcp = FastMCP("s3-mcp-server", host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
-
+mcp = FastMCP(
+    "s3-mcp-server",
+    host="0.0.0.0",
+    port=int(os.environ.get("PORT", 8000)),
+)
 
 
 # ── S3 client ─────────────────────────────────────────────────────────────────
@@ -58,7 +63,6 @@ def read_file(bucket: str, key: str, region: str = AWS_REGION) -> str:
         logger.exception("Unexpected error in read_file")
         return f"Unexpected error: {e}"
 
-    # Auto-decompress gzip
     if key.endswith(".gz"):
         try:
             raw = gzip.decompress(raw)
@@ -127,6 +131,5 @@ def object_exists(bucket: str, key: str, region: str = AWS_REGION) -> str:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    # transport="sse" exposes /sse and /messages/ automatically
-    mcp.run(transport="sse")
+    # streamable-http exposes POST /mcp — works correctly with Cursor Automations
+    mcp.run(transport="streamable-http")
